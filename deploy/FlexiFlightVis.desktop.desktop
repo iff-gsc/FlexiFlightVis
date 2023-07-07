@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=FlexiFlightVis
+Comment=Aeroelastic Airplane Visualization
+Exec=FlexiFlightVis
+Icon=FlexiFlightVis
+Categories=Office;

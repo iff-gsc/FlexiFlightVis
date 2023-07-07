@@ -1,0 +1,106 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'  
+  pull_request:
+    branches:
+      - main
+      
+defaults:
+  run:
+    shell: bash
+    
+env:
+  SOURCE_DIR:   ${{ github.workspace }}
+  QT_VERSION:   5.15.2
+  ARTIFACT:     FlexiFlightVis
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+         
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version:      ${{ env.QT_VERSION }}
+          host:         linux
+          target:       desktop
+          dir:          ${{ runner.temp }}
+          
+      - name: Install dependencies
+        run:  sudo apt-get install -y libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev
+          
+      - name: Create build directory
+        run:  |
+              mkdir ${{ runner.temp }}/shadow_build_dir
+              mkdir ${{ runner.temp }}/shadow_app_dir
+        
+      - name: Build
+        working-directory: ${{ runner.temp }}/shadow_build_dir
+        run:  |
+              qmake ${SOURCE_DIR}/FlexiFlightVis.pro -spec linux-g++ CONFIG+=debug CONFIG+=qml_debug
+              make
+             
+      - name: Download linuxdeployqt
+        working-directory: ${{ runner.temp }}/shadow_app_dir
+        run:  |
+              wget -c --quiet "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
+              chmod a+x linuxdeployqt-continuous-x86_64.AppImage
+              
+      - name: Create AppImage
+        working-directory: ${{ runner.temp }}/shadow_app_dir
+        run:  |
+              cp ${SOURCE_DIR}/deploy/FlexiFlightVis.desktop.desktop ${{ runner.temp }}/shadow_build_dir/
+              cp ${SOURCE_DIR}/deploy/FlexiFlightVis.png ${{ runner.temp }}/shadow_build_dir/
+              ./linuxdeployqt-continuous-x86_64.AppImage ../shadow_build_dir/FlexiFlightVis -appimage
+
+      - name: Save artifact
+        uses: actions/upload-artifact@main
+        with:
+          name: ${{ env.ARTIFACT }}
+          path: ${{ runner.temp }}/shadow_app_dir/${{ env.ARTIFACT }}-x86_64.AppImage
+        
+  release:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    name: Release
+    runs-on: ubuntu-20.04
+    needs: build
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.ARTIFACT }}
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # This token is provided by Actions, you do not need to create your own token
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          draft: false
+          prerelease: false
+      - name: Set env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      - name: Test
+        run: |
+          echo $RELEASE_VERSION
+          echo ${{ env.RELEASE_VERSION }}
+      - name: Upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./FlexiFlightVis-x86_64.AppImage
+          asset_name: FlexiFlightVis-${{ env.RELEASE_VERSION }}.AppImage
+          asset_content_type: application
+          
