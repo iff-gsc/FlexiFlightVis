@@ -19,6 +19,7 @@ DEFINES += QT_DEPRECATED_WARNINGS
 
 SOURCES += \
     src/aircraft.cpp \
+    src/functions.cpp \
     src/main.cpp \
     src/mainwindow.cpp \
     src/myudp.cpp \
@@ -26,6 +27,7 @@ SOURCES += \
 
 HEADERS += \
     src/aircraft.h \
+    src/functions.h \
     src/mainwindow.h \
     src/myudp.h \
     src/structWithFieldnames.h

@@ -228,6 +228,7 @@ void Wing::setWing(StructWithFieldnames wing) {
         m_trailing_edge_sep_pt.append(X[3*i+1]);
     }
     m_cL_act2 = unsteady.getSubData("c_L_act2");
+    m_cL_flap = unsteady.getSubData("c_L_c_flap");
     this->setOrigin(origin);
     this->wind.setWind(wing);
 }
@@ -411,33 +412,24 @@ void Wing::plot() {
     // draw aerodynamic forces
     QVector3D pointCop;
     QVector3D pointCopPlusForce;
+    QVector3D pointCopPlusFlapForce;
     QVector3D pointCopPlusLadForce;
     for (int i=0; i < m_cntrl_pt.m_x.length(); i++) {
         pointCop = this->getCenterOfPressureAt(i);
         pointCopPlusForce = pointCop;
+        pointCopPlusFlapForce = pointCop;
         pointCopPlusLadForce = pointCop;
         QVector3D forceVector( m_coeffLocal.m_c_XYZ_b[0][i], m_coeffLocal.m_c_XYZ_b[1][i], m_coeffLocal.m_c_XYZ_b[2][i] );
+        QVector3D flapForceVector( 0, 0, -m_cL_flap[i] );
         QVector3D ladForceVector( 0, 0, -m_cL_act2[i] );
 
-        // rotate (wow)
-        QGenericMatrix<1,3,double> forceVectorMat;
-        forceVectorMat(0,0) = forceVector.x();
-        forceVectorMat(1,0) = forceVector.y();
-        forceVectorMat(2,0) = forceVector.z();
-        forceVectorMat = m_rotationMatrix * forceVectorMat;
-        forceVector.setX(forceVectorMat(0,0));
-        forceVector.setY(forceVectorMat(1,0));
-        forceVector.setZ(forceVectorMat(2,0));
-        QGenericMatrix<1,3,double> ladForceVectorMat;
-        ladForceVectorMat(0,0) = ladForceVector.x();
-        ladForceVectorMat(1,0) = ladForceVector.y();
-        ladForceVectorMat(2,0) = ladForceVector.z();
-        ladForceVectorMat = m_rotationMatrix * ladForceVectorMat;
-        ladForceVector.setX(ladForceVectorMat(0,0));
-        ladForceVector.setY(ladForceVectorMat(1,0));
-        ladForceVector.setZ(ladForceVectorMat(2,0));
+        // rotate
+        Functions::rotateVector(&forceVector,m_rotationMatrix);
+        Functions::rotateVector(&flapForceVector,m_rotationMatrix);
+        Functions::rotateVector(&ladForceVector,m_rotationMatrix);
 
         pointCopPlusForce = pointCop + forceVector * (m_vortex.m_c[i]+m_vortex.m_c[i+1])/2 * 5;
+        pointCopPlusFlapForce = pointCop + flapForceVector * (m_vortex.m_c[i]+m_vortex.m_c[i+1])/2 * 5;
         pointCopPlusLadForce = pointCop + ladForceVector * (m_vortex.m_c[i]+m_vortex.m_c[i+1])/2 * 5;
         QVector3D pointSeparationHelp = pointCop + (1-m_trailing_edge_sep_pt[i])*(pointCopPlusForce-pointCop);
         // pointCopPlusForce = pointCop + forceVector * 10;
@@ -448,6 +440,11 @@ void Wing::plot() {
             glVertex3f(pointSeparationHelp.x(),pointSeparationHelp.y(),pointSeparationHelp.z());
             glColor4f(m_stallColor[0],m_stallColor[1],m_stallColor[2],m_stallAlpha);
             glVertex3f(pointCopPlusForce.x(),pointCopPlusForce.y(),pointCopPlusForce.z());
+        glEnd();
+        glColor4f(m_flapForceColor[0],m_flapForceColor[1],m_flapForceColor[2],m_flapForceAlpha);
+        glBegin(GL_LINE_STRIP);
+            glVertex3f(pointCop.x(),pointCop.y(),pointCop.z());
+            glVertex3f(pointCopPlusFlapForce.x(),pointCopPlusFlapForce.y(),pointCopPlusFlapForce.z());
         glEnd();
         glColor4f(m_ladForceColor[0],m_ladForceColor[1],m_ladForceColor[2],m_ladForceAlpha);
         glBegin(GL_LINE_STRIP);
