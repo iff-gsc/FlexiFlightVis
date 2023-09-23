@@ -94,6 +94,7 @@ public:
     QVector3D getPointTrailAt(int i, int side);
     QVector3D getPointFlapAt(int i, int side);
     QVector3D getCenterOfPressureAt(int i);
+    QVector3D getCenterOfPressureAt(int i, float c_L, float c_m);
     void plot();
     void plot(QVector3D shift, QQuaternion rotation);
     void setVelocity(double velocity);
@@ -102,7 +103,9 @@ private:
     Cntrl_pt m_cntrl_pt;
     CoeffLocal m_coeffLocal;
     QVector<double> m_cL_flap;
+    QVector<double> m_cm_flap;
     QVector<double> m_cL_act2;
+    QVector<double> m_cm_act2;
     QVector3D m_origin;
     QGenericMatrix<3,3,double> m_rotationMatrix;
     QVector3D m_shift;
@@ -111,6 +114,7 @@ private:
     Wind wind;
     double m_velocity;
     QVector<double> m_trailing_edge_sep_pt;
+    QVector<QVector<double>> m_v_i;
     float m_lineColor[3] = {0.1,0.1,0.1};
     float m_lineAlpha = 1.0;
     float m_faceColor[3] = {0.99,0.99,0.99};

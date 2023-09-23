@@ -215,6 +215,7 @@ void Wing::setWing(StructWithFieldnames wing) {
     StructWithFieldnames segments2 = actuators.getSubStruct("segments");
     QVector<double> origin = geometry.getSubData("origin");
     StructWithFieldnames unsteady = aero.getSubStruct("unsteady");
+    StructWithFieldnames circulation = aero.getSubStruct("circulation");
     this->m_vortex.setVortex(vortex);
     this->m_cntrl_pt.setCntrlPt(cntrl_pt);
     this->m_coeffLocal.setCoeffLocal(coeffLocal);
@@ -224,11 +225,16 @@ void Wing::setWing(StructWithFieldnames wing) {
         m_flap_deflection.append(flap_deflection_2x[2*i]);
     }
     QVector<double> X = unsteady.getSubData("X");
+    QVector<double> v_i = circulation.getSubData("v_i");
     for (int i=0; i<X.length()/3; i++) {
         m_trailing_edge_sep_pt.append(X[3*i+1]);
+        QVector<double> v_i_i {v_i[3*i],v_i[3*i+1],v_i[3*i+2]};
+        m_v_i.append(v_i_i);
     }
     m_cL_act2 = unsteady.getSubData("c_L_act2");
+    m_cm_act2 = unsteady.getSubData("c_m_act2");
     m_cL_flap = unsteady.getSubData("c_L_c_flap");
+    m_cm_flap = unsteady.getSubData("c_m_flap");
     this->setOrigin(origin);
     this->wind.setWind(wing);
 }
@@ -368,7 +374,7 @@ QVector3D Wing::getPointFlapAt(int i, int side) {
     return pointFlap;
 }
 
-QVector3D Wing::getCenterOfPressureAt(int i) {
+QVector3D Wing::getCenterOfPressureAt(int i, float c_L, float c_m) {
     QVector3D cntrl_pt_i( m_cntrl_pt.m_x[i], m_cntrl_pt.m_y[i], m_cntrl_pt.m_z[i] );
     QVector3D cop_i;
     QGenericMatrix<1,3,double> cop_i_Mat;
@@ -376,7 +382,7 @@ QVector3D Wing::getCenterOfPressureAt(int i) {
     cntrl_pt_i = cntrl_pt_i + m_origin + m_shift;
     // shift the point from control point to center of pressure
     float chord = ( m_vortex.m_c[i] + m_vortex.m_c[i+1] ) / 2;
-    float distance = m_coeffLocal.m_c_m_airfoil[i] / sqrt( pow(m_coeffLocal.m_c_XYZ_b[0][i],2) + pow(m_coeffLocal.m_c_XYZ_b[1][i],2) + pow(m_coeffLocal.m_c_XYZ_b[2][i],2) ) * chord;
+    float distance = c_m / c_L * chord;
     if (distance>chord/4) {
         distance = chord/4;
     }
@@ -401,6 +407,13 @@ QVector3D Wing::getCenterOfPressureAt(int i) {
     return cop_i;
 }
 
+QVector3D Wing::getCenterOfPressureAt(int i) {
+    float c_L = sqrt( pow(m_coeffLocal.m_c_XYZ_b[0][i],2) + pow(m_coeffLocal.m_c_XYZ_b[1][i],2) + pow(m_coeffLocal.m_c_XYZ_b[2][i],2) );
+    float c_m = m_coeffLocal.m_c_m_airfoil[i];
+    QVector3D cop_i = this->getCenterOfPressureAt( i, c_L, c_m);
+    return cop_i;
+}
+
 void Wing::plot(QVector3D shift, QQuaternion rotation) {
     m_shift = shift;
     m_rotationMatrix = Math::quaternion2RotationMatrix(rotation);
@@ -416,12 +429,15 @@ void Wing::plot() {
     QVector3D pointCopPlusLadForce;
     for (int i=0; i < m_cntrl_pt.m_x.length(); i++) {
         pointCop = this->getCenterOfPressureAt(i);
-        pointCopPlusForce = pointCop;
-        pointCopPlusFlapForce = pointCop;
-        pointCopPlusLadForce = pointCop;
         QVector3D forceVector( m_coeffLocal.m_c_XYZ_b[0][i], m_coeffLocal.m_c_XYZ_b[1][i], m_coeffLocal.m_c_XYZ_b[2][i] );
         QVector3D flapForceVector( 0, 0, -m_cL_flap[i] );
-        QVector3D ladForceVector( 0, 0, -m_cL_act2[i] );
+        // QVector3D ladForceVector( m_coeffLocal.m_c_XYZ_b[0][i], m_coeffLocal.m_c_XYZ_b[1][i], m_coeffLocal.m_c_XYZ_b[2][i] );
+        QVector3D inflowVector( m_v_i[i][0], m_v_i[i][1], m_v_i[i][2] );
+        QVector3D spanVector( m_vortex.m_x[i+1]-m_vortex.m_x[1], m_vortex.m_y[i+1]-m_vortex.m_y[1], m_vortex.m_z[i+1]-m_vortex.m_z[1] );
+        QVector3D ladForceVector = QVector3D::crossProduct(inflowVector,spanVector);
+        // QVector3D ladForceVector( 0, 0, -m_cL_act2[i] );
+        ladForceVector.normalize();
+        ladForceVector = ladForceVector * m_cL_act2[i];
 
         // rotate
         Functions::rotateVector(&forceVector,m_rotationMatrix);
@@ -429,8 +445,10 @@ void Wing::plot() {
         Functions::rotateVector(&ladForceVector,m_rotationMatrix);
 
         pointCopPlusForce = pointCop + forceVector * (m_vortex.m_c[i]+m_vortex.m_c[i+1])/2 * 5;
-        pointCopPlusFlapForce = pointCop + flapForceVector * (m_vortex.m_c[i]+m_vortex.m_c[i+1])/2 * 5;
-        pointCopPlusLadForce = pointCop + ladForceVector * (m_vortex.m_c[i]+m_vortex.m_c[i+1])/2 * 5;
+        QVector3D pointCopFlap = this->getCenterOfPressureAt( i, m_cL_flap[i], m_cm_flap[i] );
+        pointCopPlusFlapForce = pointCopFlap + flapForceVector * (m_vortex.m_c[i]+m_vortex.m_c[i+1])/2 * 5;
+        QVector3D pointCopLad = this->getCenterOfPressureAt( i, m_cL_act2[i], m_cm_act2[i] );
+        pointCopPlusLadForce = pointCopLad + ladForceVector * (m_vortex.m_c[i]+m_vortex.m_c[i+1])/2 * 5;
         QVector3D pointSeparationHelp = pointCop + (1-m_trailing_edge_sep_pt[i])*(pointCopPlusForce-pointCop);
         // pointCopPlusForce = pointCop + forceVector * 10;
         glBegin(GL_LINE_STRIP);
@@ -443,12 +461,12 @@ void Wing::plot() {
         glEnd();
         glColor4f(m_flapForceColor[0],m_flapForceColor[1],m_flapForceColor[2],m_flapForceAlpha);
         glBegin(GL_LINE_STRIP);
-            glVertex3f(pointCop.x(),pointCop.y(),pointCop.z());
+            glVertex3f(pointCopFlap.x(),pointCopFlap.y(),pointCopFlap.z());
             glVertex3f(pointCopPlusFlapForce.x(),pointCopPlusFlapForce.y(),pointCopPlusFlapForce.z());
         glEnd();
         glColor4f(m_ladForceColor[0],m_ladForceColor[1],m_ladForceColor[2],m_ladForceAlpha);
         glBegin(GL_LINE_STRIP);
-            glVertex3f(pointCop.x(),pointCop.y(),pointCop.z());
+            glVertex3f(pointCopLad.x(),pointCopLad.y(),pointCopLad.z());
             glVertex3f(pointCopPlusLadForce.x(),pointCopPlusLadForce.y(),pointCopPlusLadForce.z());
         glEnd();
     }
