@@ -433,7 +433,7 @@ void Wing::plot() {
         QVector3D flapForceVector( 0, 0, -m_cL_flap[i] );
         // QVector3D ladForceVector( m_coeffLocal.m_c_XYZ_b[0][i], m_coeffLocal.m_c_XYZ_b[1][i], m_coeffLocal.m_c_XYZ_b[2][i] );
         QVector3D inflowVector( m_v_i[i][0], m_v_i[i][1], m_v_i[i][2] );
-        QVector3D spanVector( m_vortex.m_x[i+1]-m_vortex.m_x[1], m_vortex.m_y[i+1]-m_vortex.m_y[1], m_vortex.m_z[i+1]-m_vortex.m_z[1] );
+        QVector3D spanVector( m_vortex.m_x[i+1]-m_vortex.m_x[i], m_vortex.m_y[i+1]-m_vortex.m_y[i], m_vortex.m_z[i+1]-m_vortex.m_z[i] );
         QVector3D ladForceVector = QVector3D::crossProduct(inflowVector,spanVector);
         // QVector3D ladForceVector( 0, 0, -m_cL_act2[i] );
         ladForceVector.normalize();
